@@ -5,6 +5,8 @@ class Tile {
   int bombsNear = 0;
   boolean flagged = false;
   int flagsNear=0;
+  int unrevealedNear = 8;
+  int unrevealedMax = 8;
   PVector pos;
   Tile(int x, int y) {
     pos = new PVector (x, y);
@@ -19,7 +21,7 @@ class Tile {
     }
     rect(pos.x, pos.y+headerSize, tileSize, tileSize);
     if (!hidden) {
-      if (bomb) { //<>//
+      if (bomb) {
         image(mine,pos.x,pos.y+headerSize,tileSize,tileSize);
       } else {
         switch (bombsNear) {

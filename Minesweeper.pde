@@ -1,4 +1,4 @@
-int tileSize = 30; //<>//
+int tileSize = 30;
 int headerSize=70;
 int fieldx=30; // 8,16,30
 int fieldy=16; // 8,16,16
@@ -25,6 +25,15 @@ PImage flag;
 int tilesCleared=0;
 int flags=mines;
 
+int errors = 0;
+
+enum gameStates{playing,won,lost};
+
+int numGames = 0;
+int numWins = 0;
+int winPercentage = 0;
+
+gameStates gameState = gameStates.playing;
 
 
 void setup() {
@@ -72,16 +81,30 @@ void draw() {
   fill(#000000);
   textAlign(CENTER);
   updateTime();
-  text("Flags: "+flags, fieldx*tileSize/2, headerSize/2-10);                              //prototype for showing remaining flags
+  text("Flags: "+flags, fieldx*tileSize/2, headerSize/2-15);                              //prototype for showing remaining flags
+  
+  if(gameOver){
+    if(gameState == gameStates.won){
+      text("You Win!",fieldx*tileSize/2, headerSize/2+15);
+    }else{
+      text("You Lose!",fieldx*tileSize/2, headerSize/2+15);
+    }
+    
+  }
+  
+  text("Win Percentage: " + winPercentage + "%",fieldx*tileSize/2, headerSize/2+25);
   
   for (int i = 0; i<fieldx; i++) {
     for (int j = 0; j<fieldy; j++) {
       tiles[i][j].show();
     }
   }
+  if(!gameOver){
+    //runai();
+  }
 }
 
-void setBeginner(){
+void setBeginner(){           //rever this
   fieldx=8;
   fieldy=8;
   mines=10;
@@ -105,21 +128,23 @@ void setExpert(){
 
 void updateTime(){
   if(gameOver){
-    text("Time: "+lastTime,fieldx*tileSize/2, headerSize/2+10);
+    text("Time: "+lastTime,fieldx*tileSize/2, headerSize/2+0);
   }else{
     lastTime = (millis()-time)/1000;
-    text("Time: "+lastTime,fieldx*tileSize/2, headerSize/2+10);
+    text("Time: "+lastTime,fieldx*tileSize/2, headerSize/2+0);
   }
   
 }
 void newGame(){
   time = millis();
   gameOver=false;
+  gameState = gameStates.playing;
   tilesCleared = 0;
   flags = mines;
   for (int i = 0; i<fieldx; i++) {
     for (int j = 0; j<fieldy; j++) {
       tiles[i][j]=new Tile(i*tileSize, j*tileSize);
+      set_unrevealed(i,j);
     }
   }
   int createdMines = 0;
@@ -139,6 +164,28 @@ void newGame(){
     }
   }
 }
+
+void set_unrevealed(int x, int y){
+  int unrevealed = 0;
+  int type = 0;
+  if(x==0||x==fieldx-1)type++;
+  if(y==0||y==fieldy-1)type++;
+  
+  switch (type){
+    case 0:
+    unrevealed = 8;
+    break;
+    case 1:
+    unrevealed = 5;
+    break;
+    case 2:
+    unrevealed = 3;
+    break;
+  }
+  tiles[x][y].unrevealedNear = unrevealed;
+  tiles[x][y].unrevealedMax = unrevealed;
+}
+
 
 int  calculate(int x, int y) {
   int numMines=0;
@@ -186,12 +233,19 @@ void reveal(int x,int y){
     tilesCleared++;                         ///start here,       fix the win bug;
     println(tilesCleared);
     tiles[x][y].hidden=false;
+    decrement_unrevealed(x,y);
   }
     if(tiles[x][y].bomb){
+      if(tilesCleared>8){
+        numGames++;
+      }
+      updateWinPercentage();
       gameOver=true;
       tiles[x][y].triggerBomb = true;
       tiles[x][y].hidden=false;
+      gameState = gameStates.lost;
       println("You lose!");
+      println("errors: "+errors);
       revealbombs();
     }
     else{
@@ -204,11 +258,33 @@ void reveal(int x,int y){
       }  
     }
   
-  if(tilesCleared==fieldy*fieldx-mines){
+  if(tilesCleared==fieldy*fieldx-mines&&gameOver==false){
     gameOver=true;
+    if(tilesCleared>8){
+      numGames++;
+      numWins++;
+    }
+    updateWinPercentage();
     flagRest();
     println("You win!");
+    gameState = gameStates.won;
+    println("errors: "+errors);
     //newGame();
+  }
+}
+
+void updateWinPercentage(){
+  float temp=(float)numWins/numGames * 100;
+  winPercentage = (int)temp;
+}
+
+void decrement_unrevealed(int x,int y){
+  for(int i = x-1;i<=x+1;i++){
+    for(int j = y-1;j<=y+1;j++){
+      if(i>=0&&i<fieldx&&j>=0&&j<fieldy&&!(i==x&&j==y)){
+        tiles[i][j].unrevealedNear--;
+      }
+    }
   }
 }
 
@@ -247,7 +323,12 @@ void mousePressed() {
       }
     }
   }else if (mouseButton == RIGHT){
-    if(tiles[x][y].flagged&&tiles[x][y].hidden){
+    flagTile(x,y);
+  }
+}
+
+void flagTile(int x, int y){
+  if(tiles[x][y].flagged&&tiles[x][y].hidden){
       tiles[x][y].flagged=false;
       flags++;
       updateFlagCount(x,y,-1);
@@ -256,9 +337,8 @@ void mousePressed() {
       flags--;
       updateFlagCount(x,y,1);
     }
-  }
 }
-
+aiTile tile1,tile2;
 void keyPressed(){
   if(key == 'r'){
     newGame();
@@ -268,6 +348,38 @@ void keyPressed(){
     setIntermediate();
   }else if(key=='3'){
     setExpert();
+  }else if(key=='a'){
+    if(gameOver==false){
+      runai();
+    }
+    
+  }else if (key=='s'){
+    PVector vec = gettile(mouseX,mouseY);
+    int x = (int)vec.x;
+    int y = (int)vec.y;
+    print("x:");
+    println(x);
+    print("y:");
+    println(y);
+  }else if(key==','){
+    PVector vec = gettile(mouseX,mouseY);
+    int x = (int)vec.x;
+    int y = (int)vec.y;
+    Tile t = tiles[x][y];
+    tile1 = new aiTile(x,y,t.hidden,t.bombsNear,t.flagged,t.flagsNear,t.unrevealedNear,t.unrevealedMax);
+  }else if(key=='.'){
+    PVector vec = gettile(mouseX,mouseY);
+    int x = (int)vec.x;
+    int y = (int)vec.y;
+    Tile t = tiles[x][y];
+    tile2 = new aiTile(x,y,t.hidden,t.bombsNear,t.flagged,t.flagsNear,t.unrevealedNear,t.unrevealedMax);
+  }else if(key=='c'){
+    println(isRelated(tile1,tile2));
+  }else if(key=='p'){
+    while(!gameOver){
+      runai();
+      delay(50);
+    }
   }
 }
 
@@ -289,3 +401,7 @@ PVector gettile(int x,int y){
   vec.y=(y-headerSize)/tileSize;
   return vec;
 }
+
+//add within field method
+//change winPercentage to show only 2 decimal places
+//update the procedure of starting the game(the setlevel methods don't get called when launching the game
